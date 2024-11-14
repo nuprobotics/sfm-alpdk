@@ -58,13 +58,9 @@ def triangulation(
         kp2: typing.Sequence[cv2.KeyPoint],
         matches: typing.Sequence[cv2.DMatch]
 ):
-    # Compute translation vectors for each camera
-    translation_vector1 = -camera1_rotation_matrix.T @ camera1_translation_vector
-    translation_vector2 = -camera2_rotation_matrix.T @ camera2_translation_vector
-
     # Compute projection matrices for each camera
-    projection_matrix1 = camera_matrix @ np.hstack((camera1_rotation_matrix.T, translation_vector1.reshape(3, 1)))
-    projection_matrix2 = camera_matrix @ np.hstack((camera2_rotation_matrix.T, translation_vector2.reshape(3, 1)))
+    projection_matrix1 = camera_matrix @ np.hstack((camera1_rotation_matrix, camera1_translation_vector.reshape(3, 1)))
+    projection_matrix2 = camera_matrix @ np.hstack((camera2_rotation_matrix, camera2_translation_vector.reshape(3, 1)))
 
     points1 = np.array([kp1[match.queryIdx].pt for match in matches], dtype=np.float32)
     points2 = np.array([kp2[match.trainIdx].pt for match in matches], dtype=np.float32)
