@@ -16,9 +16,27 @@ def get_matches(image1, image2) -> typing.Tuple[
     kp2, descriptors2 = sift.detectAndCompute(img2_gray, None)
 
     bf = cv2.BFMatcher()
-    matches_1_to_2: typing.Sequence[typing.Sequence[cv2.DMatch]] = bf.knnMatch(descriptors1, descriptors2, k=2)
 
-    # YOUR CODE HERE
+    matches_1_to_2: typing.Sequence[typing.Sequence[cv2.DMatch]] = bf.knnMatch(descriptors1, descriptors2, k=2)
+    good_matches_1_to_2 = []
+    for m, n in matches_1_to_2:
+        if m.distance < 0.75 * n.distance:
+            good_matches_1_to_2.append(m)
+
+    matches_2_to_1 = bf.knnMatch(descriptors2, descriptors1, k=2)
+    good_matches_2_to_1 = []
+    for m, n in matches_2_to_1:
+        if m.distance < 0.75 * n.distance:
+            good_matches_2_to_1.append(m)
+
+    final_matches = []
+    for match1 in good_matches_1_to_2:
+        for match2 in good_matches_2_to_1:
+            if match1.queryIdx == match2.trainIdx and match1.trainIdx == match2.queryIdx:
+                final_matches.append(match1)
+                break
+
+    return kp1, kp2, final_matches
 
 
 def get_second_camera_position(kp1, kp2, matches, camera_matrix):
@@ -40,20 +58,58 @@ def triangulation(
         kp2: typing.Sequence[cv2.KeyPoint],
         matches: typing.Sequence[cv2.DMatch]
 ):
-    pass
-    # YOUR CODE HERE
+    # Compute translation vectors for each camera
+    translation_vector1 = -camera1_rotation_matrix.T @ camera1_translation_vector
+    translation_vector2 = -camera2_rotation_matrix.T @ camera2_translation_vector
+
+    # Compute projection matrices for each camera
+    projection_matrix1 = camera_matrix @ np.hstack((camera1_rotation_matrix.T, translation_vector1.reshape(3, 1)))
+    projection_matrix2 = camera_matrix @ np.hstack((camera2_rotation_matrix.T, translation_vector2.reshape(3, 1)))
+
+    points1 = np.array([kp1[match.queryIdx].pt for match in matches], dtype=np.float32)
+    points2 = np.array([kp2[match.trainIdx].pt for match in matches], dtype=np.float32)
+
+    # Number of points
+    num_points = points1.shape[0]
+
+    # Array to store the 3D points
+    points_3d = np.zeros((num_points, 3))
+
+    # For each pair of corresponding points
+    for i in range(num_points):
+        # Get the coordinates in homogeneous form
+        x1, y1 = points1[i]
+        x2, y2 = points2[i]
+
+        # Construct the system of linear equations
+        A = np.array([
+            (- x1 * projection_matrix1[2, :] + projection_matrix1[0, :]),
+            (y1 * projection_matrix1[2, :] - projection_matrix1[1, :]),
+            (- x2 * projection_matrix2[2, :] + projection_matrix2[0, :]),
+            (y2 * projection_matrix2[2, :] - projection_matrix2[1, :])
+        ])
+
+        # Solve the system using least squares
+        _, _, V = np.linalg.svd(A)
+        print(V)
+        X = V[-1]
+        X /= X[-1]  # Convert to non-homogeneous coordinates
+
+        # Store the result in the array
+        points_3d[i] = X[:3]
+
+    return points_3d
 
 
 # Task 4
 def resection(
-        image1,
-        image2,
-        camera_matrix,
-        matches,
-        points_3d
+        image1: np.ndarray,
+        image2: np.ndarray,
+        camera_matrix: np.ndarray,
+        matches: typing.Sequence[cv2.DMatch],
+        points_3d: np.ndarray
 ):
-    pass
-    # YOUR CODE HERE
+    print(len(points_3d))
 
 
 def convert_to_world_frame(translation_vector, rotation_matrix):
