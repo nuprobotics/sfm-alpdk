@@ -105,12 +105,71 @@ def resection(
         matches: typing.Sequence[cv2.DMatch],
         points_3d: np.ndarray
 ):
-    print(len(points_3d))
+    kp1, kp2, matches2 = get_matches(image1, image2)
 
+    final_matches = []
+    final_points_3d = []
+
+    i = 0
+
+    for match2 in matches2:
+        if any(match2.queryIdx == match.queryIdx for match in matches):
+            final_matches.append(match2)
+            final_points_3d.append(points_3d[i])
+        i += 1
+
+    final_points_3d = np.array(final_points_3d)
+
+    # for match in final_matches:
+    #     print(f"Query Index: {match.queryIdx}, Train Index: {match.trainIdx}, Distance: {match.distance}")
+
+    # Collect the 2D coordinates from both images
+    # points_2d_image1 = np.array([kp1[match.queryIdx].pt for match in final_matches], dtype=np.float32)
+    points_2d_image2 = np.array([kp2[match.trainIdx].pt for match in final_matches], dtype=np.float32)
+
+    # print(points_2d_image1.shape)
+    # print(points_2d_image2.shape)
+    # print(final_points_3d.shape)
+
+    A = []
+    for i in range(len(points_2d_image2)):
+        X, Y, Z = final_points_3d[i]
+        # x1, y1 = points_2d_image1[i]
+        x2, y2 = points_2d_image2[i]
+
+        # A.append([X, Y, Z, 1,  0,  0,  0,  0, -x1 * X, -x1 * Y, -x1 * Z, -x1])
+        # A.append([0, 0, 0, 0, -X, -Y, -Z, -1,  y1 * X,  y1 * Y,  y1 * Z,  y1])
+
+        A.append([X, Y, Z, 1,  0,  0,  0,  0, -x2 * X, -x2 * Y, -x2 * Z, -x2])
+        A.append([0, 0, 0, 0, -X, -Y, -Z, -1,  y2 * X,  y2 * Y,  y2 * Z,  y2])
+
+    A = np.array(A)
+
+    _, _, VT = np.linalg.svd(A)
+
+    P = VT[-1].reshape(3, 4)
+
+    M = np.dot(np.linalg.inv(camera_matrix), P)
+
+    R = M[:, :3]
+
+    t = M[:, 3]
+
+    t = t.reshape((3, 1))
+
+    R = R.T
+    t = -np.dot(np.linalg.inv(R.T), t)
+
+    print(R)
+    print(t)
+
+    return R, t
 
 def convert_to_world_frame(translation_vector, rotation_matrix):
-    pass
-    # YOUR CODE HERE
+    world_rotation = rotation_matrix.T
+    world_position = -np.dot(world_rotation, translation_vector)
+
+    return world_position, world_rotation
 
 
 def visualisation(
